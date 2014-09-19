@@ -1,11 +1,13 @@
-function HookBase(server_url) {
-  var ws_connection   = new WebSocket(server_url);
-  var push_callback   = undefined;
-  var remove_callback = undefined;
-  var getAll_callback = undefined;
+function HookBase(serverUrl) {
+  var wsConnection = new WebSocket(serverUrl);
+
+  var pushCallback        = undefined;
+  var removeCallback      = undefined;
+  var getAllCallback      = undefined;
+  var dataChangedCallback = undefined;
 
   this.push = function(message, callback) {
-    push_callback = callback;
+    pushCallback = callback;
     sendJS({
       request: "push",
       data:    message
@@ -13,7 +15,7 @@ function HookBase(server_url) {
   };
 
   this.remove = function(id, callback) {
-    remove_callback = callback;
+    removeCallback = callback;
     sendJS({
       request: "remove",
       id:      id
@@ -21,24 +23,30 @@ function HookBase(server_url) {
   };
 
   this.getAll = function(callback) {
-    getAll_callback = callback;
+    getAllCallback = callback;
     sendJS({
       request: "getAll"
     });
-  }
+  };
+
+  this.onDataChange = function(callback) {
+    dataChangedCallback = callback;
+  };
 
   var sendJS = function(data) {
-    ws_connection.send(JSON.stringify(data));
-  }
+    wsConnection.send(JSON.stringify(data));
+  };
 
-  ws_connection.onmessage = function(event) {
+  wsConnection.onmessage = function(event) {
     data = JSON.parse(event.data);
-    if (isPushed(data) && push_callback) {
-      push_callback(data);
-    } else if (isRemoved(data) && remove_callback) {
-      remove_callback(data);
-    } else if (isGetAll(data) && getAll_callback) {
-      getAll_callback(data);
+    if (isPushed(data)) {
+      if (pushCallback) pushCallback(data);
+    } else if (isRemoved(data)) {
+      if (removeCallback) removeCallback(data);
+    } else if (isGetAll(data)) {
+      if (getAllCallback) getAllCallback(data);
+    } else if (isDataChanged(data)) {
+      if (dataChangedCallback) dataChangedCallback(data);
     } else {
       console.log("UNHANDLED: ", data);
     }
@@ -46,29 +54,36 @@ function HookBase(server_url) {
 
   var isPushed = function(data) {
     return hasVal(data, "pushed");
-  }
+  };
 
   var isRemoved = function(data) {
     return hasVal(data, "removed");
-  }
+  };
 
   var isGetAll = function(data) {
     return hasVal(data, "respondingAll");
-  }
+  };
+
+  var isDataChanged = function(data) {
+    return hasVal(data, "dataChanged");
+  };
 
   var hasVal = function(data, val) {
     return data["response"] == val;
-  }
+  };
 
   this.onOpen = function(callback) {
-    ws_connection.onopen = callback;
+    wsConnection.onopen = callback;
   };
 }
 
-var my_socket = new HookBase("ws:0.0.0.0:8125");
+var mySocket = new HookBase("ws:0.0.0.0:8125");
+mySocket.onDataChange(function(data) {
+  console.log("Data changed...: ", data);
+});
 
-my_socket.onOpen(function(event) {
+mySocket.onOpen(function(event) {
   console.log("Connection open", event);
 
-  my_socket.push("IT", function(data) { console.log("Inserted: ", data); });
+  mySocket.push("IT", function(data) { console.log("Inserted: ", data); });
 });
